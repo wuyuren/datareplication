@@ -1,0 +1,299 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:p="http://www.springframework.org/schema/p"
+	xmlns:util="http://www.springframework.org/schema/util" xmlns:context="http://www.springframework.org/schema/context"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans
+	http://www.springframework.org/schema/beans/spring-beans.xsd
+	http://www.springframework.org/schema/util
+	http://www.springframework.org/schema/util/spring-util.xsd
+	http://www.springframework.org/schema/context 
+	http://www.springframework.org/schema/context/spring-context.xsd
+	">
+
+
+	<context:property-placeholder
+		properties-ref="elasticnls.prop" ignore-unresolvable="true" />
+
+	<util:properties id="elasticnls.prop"
+		location="file:///${cdt.app.config.path}/elasticnls/elasticnls.properties" />
+
+
+
+
+	<!-- database bookmark store for consumer -->
+
+	<bean id="elasticnls.bookmarkstore"
+		class="com.elevate.edw.sqlservercdc.kafka.DatabaseBookmarkStore">
+		<constructor-arg type="DataSource" ref="databaseBookmarkStoreDs" />
+		<!-- consumer group -->
+		<constructor-arg type="String"
+			value="${elasticnls.kafka.consumer.group.id}" />
+		<!-- store table name -->
+		<constructor-arg type="String"
+			value="${elasticnls.bookmarkstore.table.name}" />
+		<!-- history table name -->
+		<constructor-arg type="String"
+			value="${elasticnls.bookmarkstore.history.table.name}" />
+	</bean>
+
+	<!-- database version store for producer -->
+	<bean id="elasticnls.versionstore" class="com.elevate.edw.sqlservercdc.DatabaseVersionStore">
+		<constructor-arg type="DataSource" ref="databaseVersionStoreDs" />
+		<!-- store key string -->
+		<constructor-arg type="String"
+			value="${elasticnls.versionstore.key.id}" />
+		<!-- store table name -->
+		<constructor-arg type="String"
+			value="${elasticnls.versionstore.table.name}" />
+	</bean>
+
+	<!-- data source for reading change table pks -->
+	<bean id="elasticnls.transds" class="org.apache.commons.dbcp2.BasicDataSource"
+		destroy-method="close">
+		<property name="driverClassName" value="com.microsoft.sqlserver.jdbc.SQLServerDriver" />
+		<property name="url" value="${elasticnls.transds.jdbc.url}" />
+		<property name="username" value="${elasticnls.transds.jdbc.username}" />
+		<property name="password" value="${elasticnls.transds.jdbc.password}" />
+
+		<!-- connection pool properties -->
+		<property name="initialSize" value="${elasticnls.transds.jdbc.initialSize}" />
+		<property name="maxTotal" value="${elasticnls.transds.jdbc.maxTotal}" />
+		<property name="poolPreparedStatements" value="true" />
+		<property name="defaultTransactionIsolation">
+			<util:constant
+				static-field="java.sql.Connection.TRANSACTION_READ_UNCOMMITTED" />
+		</property>
+	<!--<property name = "connectionInitSqls">
+        	<list>
+        		<value>SELECT 'Hello world'</value>
+       		</list>
+    	</property> -->
+	</bean>
+
+	<!-- data source for reading change table data -->
+	<bean id="elasticnls.readds" class="org.apache.commons.dbcp2.BasicDataSource"
+		destroy-method="close">
+		<property name="driverClassName" value="com.microsoft.sqlserver.jdbc.SQLServerDriver" />
+		<property name="url" value="${elasticnls.readds.jdbc.url}" />
+		<property name="username" value="${elasticnls.readds.jdbc.username}" />
+		<property name="password" value="${elasticnls.readds.jdbc.password}" />
+
+		<!-- connection pool properties -->
+		<property name="initialSize" value="${elasticnls.readds.jdbc.initialSize}" />
+		<property name="maxTotal" value="${elasticnls.readds.jdbc.maxTotal}" />
+		<property name="poolPreparedStatements" value="true" />
+		<property name="defaultTransactionIsolation">
+			<util:constant
+				static-field="java.sql.Connection.TRANSACTION_READ_UNCOMMITTED" />
+		</property>
+	</bean>
+
+
+	<!-- kafka producer config -->
+	<util:map id="elasticnls.producer.config">
+		<entry>
+			<key>
+				<util:constant
+					static-field="org.apache.kafka.clients.producer.ProducerConfig.BOOTSTRAP_SERVERS_CONFIG" />
+			</key>
+			<value>${elasticnls.kafka.bootstrapserver}</value>
+		</entry>
+		<entry>
+			<key>
+				<util:constant
+					static-field="org.apache.kafka.clients.producer.ProducerConfig.MAX_REQUEST_SIZE_CONFIG" />
+			</key>
+			<value>${elasticnls.kafka.producer.request.max.size}</value>
+		</entry>
+		<entry>
+			<key>
+				<util:constant
+					static-field="org.apache.kafka.clients.producer.ProducerConfig.BUFFER_MEMORY_CONFIG" />
+			</key>
+			<value>${elasticnls.kafka.producer.buffer.mem.size}</value>
+		</entry>
+		<entry key="request.timeout.ms">
+			<value>
+				${elasticnls.kafka.producer.request.timeout}
+			</value>
+		</entry>
+		<entry key="key.serializer">
+			<value type="java.lang.Class">
+				org.apache.kafka.common.serialization.IntegerSerializer
+			</value>
+		</entry>
+		<entry key="value.serializer">
+			<value type="java.lang.Class">
+				com.elevate.edw.sqlservercdc.kafka.JsonSerializer
+			</value>
+		</entry>
+		<entry key="security.protocol" value="SASL_SSL" />
+		<entry key="ssl.truststore.location" value="${elasticnls.kafka.ssl.truststore.location}"/>
+		<entry key="ssl.truststore.password" value="${elasticnls.kafka.ssl.truststore.password}"/>
+		<entry key="sasl.kerberos.service.name" value="kafka" />
+	</util:map>
+
+
+	<!-- Main configuration for producer -->
+	<bean id="elasticnls.cdt.config" class="com.elevate.edw.sqlservercdc.CDTConfiguration"
+		p:transDs-ref="elasticnls.transds" p:readDs-ref="elasticnls.readds"
+		p:tableList-ref="elasticnls.cdt.tablelist" p:maxThreadCount="5"
+		p:kafkatopic="${elasticnls.kafka.topic}" p:producerConfig-ref="elasticnls.producer.config"
+		p:versionStore-ref="elasticnls.versionstore" p:pullInterval="${elasticnls.kafka.producer.pull.interval}"/>
+
+
+	<!-- kafka consumer configuration -->
+	<util:map id="elasticnls.kafka.receiver.config">
+		<entry>
+			<key>
+				<util:constant
+					static-field="org.apache.kafka.clients.consumer.ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG" />
+			</key>
+			<value>${elasticnls.kafka.bootstrapserver}</value>
+		</entry>
+		<entry>
+			<key>
+				<util:constant
+					static-field="org.apache.kafka.clients.consumer.ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG" />
+			</key>
+			<value>${elasticnls.kafka.consumer.partition.max.fetch.bytes}</value>
+		</entry>
+		<!--  increase session liveness -->	
+		<entry key="heartbeat.interval.ms" value="20000"/>			
+		<entry key="session.timeout.ms" value="40000"/>
+		<entry key="max.poll.records" value = "100" />
+
+		<entry>
+			<key>
+				<util:constant
+					static-field="org.apache.kafka.clients.consumer.ConsumerConfig.GROUP_ID_CONFIG" />
+			</key>
+			<value>${elasticnls.kafka.consumer.group.id}</value>
+		</entry>
+		<entry key="security.protocol" value="SASL_SSL" />
+		<entry key="ssl.truststore.location" value="${elasticnls.kafka.ssl.truststore.location}" />
+		<entry key="ssl.truststore.password" value="${elasticnls.kafka.ssl.truststore.password}" />
+		<entry key="sasl.kerberos.service.name" value="kafka" />
+
+		<entry key="receiver.kafka.topics" value="${elasticnls.kafka.topic}" />
+		<entry key="receiver.thread.count" value="8" />
+	</util:map>
+	
+ 	<util:list id="elasticnls.datatransformrules" value-type="com.elevate.edw.sqlservercdc.write.transform.DataTransformRule">
+	</util:list>
+    
+	<bean id="elasticnls.datatransformer" class="com.elevate.edw.sqlservercdc.writer.transform.DataTransformer"
+    	scope="prototype" init-method="init">
+    		<constructor-arg ref="elasticnls.datatransformrules" />
+		<constructor-arg ref="elasticnls.readds" />
+	</bean>
+  
+	<!-- hbase writer configuration -->
+	<util:map id="elasticnls.hbasewriter.config" key-type="java.lang.String"
+		value-type="java.lang.String">
+		<entry key="writer.hbase.namespace" value="${elasticnls.hbase.namespace}" />
+		<entry key="writer.hbase.columnfamily" value="${elasticnls.hbase.table.columnfamily}" />
+		<!-- base directory which contains the core-site/hdfs-site/hase-site xmlfiles -->
+		<entry key="writer.hbase.hadoopconfigbasedir" value="${elasticnls.hbase.config.basedir}" />
+		<entry key="writer.hbase.login.principal" value="${elasticnls.hbase.config.login.principal}" />
+		<entry key="writer.hbase.login.keytab" value="${elasticnls.hbase.config.login.keytab}" />
+	</util:map>
+
+	<bean id="elasticnls.writer.config" class="com.elevate.edw.sqlservercdc.writer.WriterConfiguration">
+		<!-- writer class string -->
+		<constructor-arg type="String"
+			value="com.elevate.edw.sqlservercdc.writer.hbase.HbaseWriter" />
+		<!-- writer configuration -->
+		<constructor-arg type="Map" ref="elasticnls.hbasewriter.config" />
+	</bean>
+	<!-- receiverconfig -->
+	<bean id="elasticnls.receiver.config"
+		class="com.elevate.edw.sqlservercdc.kafka.ReceiverConfiguration">
+		<!-- kafka related config -->
+		<constructor-arg type="java.util.Map"
+			ref="elasticnls.kafka.receiver.config" />
+		<!-- writer configuration -->
+		<constructor-arg
+			type="com.elevate.edw.sqlservercdc.writer.WriterConfiguration" ref="elasticnls.writer.config" />
+		<!-- bookmark store -->
+		<constructor-arg
+			type="com.elevate.edw.sqlservercdc.kafka.DatabaseBookmarkStore" ref="elasticnls.bookmarkstore" />
+		<constructor-arg
+			type="com.elevate.edw.sqlservercdc.writer.transform.DataTransformer" ref="elasticnls.datatransformer" />
+	</bean>
+
+
+	<!-- CDTController instance -->
+	<bean id="elasticnls.cdtcontroller" class="com.elevate.edw.sqlservercdc.CDTController">
+		<constructor-arg type="com.elevate.edw.sqlservercdc.CDTConfiguration"
+			ref="elasticnls.cdt.config" />
+		<property name="_SLEEPINTERVAL" value="${elasticnls.kafka.producer.sleep.interval}" />
+	</bean>
+
+	<!-- Receiver instance -->
+	<bean id="elasticnls.receivercontroller" class="com.elevate.edw.sqlservercdc.kafka.ReceiverController">
+		<constructor-arg
+			type="com.elevate.edw.sqlservercdc.kafka.ReceiverConfiguration" ref="elasticnls.receiver.config" />
+		<property name="_SLEEPINTERVAL" value="${elasticnls.kafka.consumer.sleep.interval}" />
+	</bean>
+
+	<!-- Tablename list. Please use UPPER CASE -->
+	<util:list id="elasticnls.cdt.tablelist" value-type="java.lang.String">
+		<value>DBO.BATCH_TRANSACTION_DETAIL</value>
+		<value>DBO.CAMPAIGN_LIST_DETAIL</value>
+		<value>DBO.CIF</value>
+		<value>DBO.CIF_COMMENTS</value>
+		<value>DBO.CIF_COMMENTS_DOCS</value>
+		<value>DBO.CIF_DEMOGRAPHICS</value>
+		<value>DBO.CIF_DETAIL</value>
+		<value>DBO.CIF_FINANCIALS</value>
+		<value>DBO.CIF_GROUPS</value>
+		<value>DBO.CIF_MODIFICATION_HISTORY</value>
+		<value>DBO.CIF_PHONE_NUMS</value>
+		<value>DBO.CIF_USERS</value>
+		<value>DBO.CIF_WEB</value>
+		<value>DBO.CIF_WEB_ENTRY_LOG</value>
+		<value>DBO.DAILY_TRIAL_BALANCE</value>
+		<value>DBO.DTB_STATUSES</value>
+		<value>DBO.ENTRYLOG</value>
+		<value>DBO.LOANACCT</value>
+		<value>DBO.LOANACCT_ACH</value>
+		<value>DBO.LOANACCT_COLL_STATUS</value>
+		<value>DBO.LOANACCT_COLLECTIONS</value>
+		<value>DBO.LOANACCT_COMMENTS</value>
+		<value>DBO.LOANACCT_COMMENTS_DOCS</value>
+		<value>DBO.LOANACCT_CREDIT_BUREAU</value>
+		<value>DBO.LOANACCT_CREDITLINE</value>
+		<value>DBO.LOANACCT_CREDITLINE_TC</value>
+		<value>DBO.LOANACCT_DETAIL</value>
+		<value>DBO.LOANACCT_DETAIL_2</value>
+		<value>DBO.LOANACCT_GL_TRANS</value>
+		<value>DBO.LOANACCT_GROUPS</value>
+		<value>DBO.LOANACCT_INTACCRUAL</value>
+		<value>DBO.LOANACCT_MOD_HISTORY</value>
+		<value>DBO.LOANACCT_PAYMENT</value>
+		<value>DBO.LOANACCT_PAYMENT_HISTORY</value>
+		<value>DBO.LOANACCT_PAYMENTS_DUE</value>
+		<value>DBO.LOANACCT_RATE</value>
+		<value>DBO.LOANACCT_RATE_HISTORY</value>
+		<value>DBO.LOANACCT_RECURRING_TRANS</value>
+		<value>DBO.LOANACCT_SETUP</value>
+		<value>DBO.LOANACCT_STATEMENT</value>
+		<value>DBO.LOANACCT_STATEMENT_DETAIL</value>
+		<value>DBO.LOANACCT_STATISTICS</value>
+		<value>DBO.LOANACCT_STATUSES</value>
+		<value>DBO.LOANACCT_TRANS_HISTORY</value>
+		<value>DBO.LOANACCT_USERS</value>
+		<value>DBO.NLSGROUPPRIV</value>
+		<value>DBO.NLSUSERPRIV</value>
+		<value>DBO.TASK</value>
+		<value>DBO.TASK_DETAIL</value>
+		<value>DBO.TASK_DETAIL_GRID</value>
+		<value>DBO.TASK_MODIFICATION_HISTORY</value>
+		<value>DBO.TASK_ROUTING_HISTORY</value>
+		<value>DBO.TASK_TEMPLATE_GROUPS_PRIV</value>
+		<value>DBO.TMR</value>
+		<value>DBO.TMR_UDF</value>
+	</util:list>
+
+</beans>

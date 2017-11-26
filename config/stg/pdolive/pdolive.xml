@@ -1,0 +1,313 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:p="http://www.springframework.org/schema/p"
+	xmlns:util="http://www.springframework.org/schema/util" xmlns:context="http://www.springframework.org/schema/context"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans
+	http://www.springframework.org/schema/beans/spring-beans.xsd
+	http://www.springframework.org/schema/util
+	http://www.springframework.org/schema/util/spring-util.xsd
+	http://www.springframework.org/schema/context 
+	http://www.springframework.org/schema/context/spring-context.xsd
+	">
+
+	<!-- load proeprty files from file system -->
+	<context:property-placeholder
+		properties-ref="pdolive.prop" ignore-unresolvable="true" />
+
+	<util:properties id="pdolive.prop"
+		location="file:///${cdt.app.config.path}/pdolive/pdolive.properties" />
+
+
+
+	<!-- database bookmark store for consumer -->
+
+	<bean id="pdolive.bookmarkstore"
+		class="com.elevate.edw.sqlservercdc.kafka.DatabaseBookmarkStore">
+		<constructor-arg type="DataSource" ref="databaseBookmarkStoreDs" />
+		<!-- consumer group -->
+		<constructor-arg type="String"
+			value="${pdolive.kafka.consumer.group.id}" />
+		<!-- store table name -->
+		<constructor-arg type="String"
+			value="${pdolive.bookmarkstore.table.name}" />
+		<!-- history table name -->
+		<constructor-arg type="String"
+			value="${pdolive.bookmarkstore.history.table.name}" />
+	</bean>
+
+	<!-- database version store for producer -->
+	<bean id="pdolive.versionstore" class="com.elevate.edw.sqlservercdc.DatabaseVersionStore">
+		<constructor-arg type="DataSource" ref="databaseVersionStoreDs" />
+		<!-- store key string -->
+		<constructor-arg type="String" value="${pdolive.versionstore.key.id}" />
+		<!-- store table name -->
+		<constructor-arg type="String"
+			value="${pdolive.versionstore.table.name}" />
+	</bean>
+
+	<!-- data source for reading change table pks -->
+	<bean id="pdolive.transds" class="org.apache.commons.dbcp2.BasicDataSource"
+		destroy-method="close">
+		<property name="driverClassName" value="com.microsoft.sqlserver.jdbc.SQLServerDriver" />
+		<property name="url" value="${pdolive.transds.jdbc.url}" />
+		<property name="username" value="${pdolive.transds.jdbc.username}" />
+		<property name="password" value="${pdolive.transds.jdbc.password}" />
+
+		<!-- connection pool properties -->
+		<property name="initialSize" value="${pdolive.transds.jdbc.initialSize}" />
+		<property name="maxTotal" value="${pdolive.transds.jdbc.maxTotal}" />
+		<property name="poolPreparedStatements" value="true" />
+		<property name="defaultTransactionIsolation">
+			<util:constant
+				static-field="java.sql.Connection.TRANSACTION_READ_UNCOMMITTED" />
+		</property>
+	</bean>
+
+	<!-- data source for reading change table data -->
+	<bean id="pdolive.readds" class="org.apache.commons.dbcp2.BasicDataSource"
+		destroy-method="close">
+		<property name="driverClassName" value="com.microsoft.sqlserver.jdbc.SQLServerDriver" />
+		<property name="url" value="${pdolive.readds.jdbc.url}" />
+		<property name="username" value="${pdolive.readds.jdbc.username}" />
+		<property name="password" value="${pdolive.readds.jdbc.password}" />
+
+		<!-- connection pool properties -->
+		<property name="initialSize" value="${pdolive.readds.jdbc.initialSize}" />
+		<property name="maxTotal" value="${pdolive.readds.jdbc.maxTotal}" />
+		<property name="poolPreparedStatements" value="true" />
+		<property name="defaultTransactionIsolation">
+			<util:constant
+				static-field="java.sql.Connection.TRANSACTION_READ_UNCOMMITTED" />
+		</property>
+
+	</bean>
+
+
+	<!-- kafka producer config -->
+	<util:map id="pdolive.producer.config">
+		<entry>
+			<key>
+				<util:constant
+					static-field="org.apache.kafka.clients.producer.ProducerConfig.BOOTSTRAP_SERVERS_CONFIG" />
+			</key>
+			<value>${pdolive.kafka.bootstrapserver}</value>
+		</entry>
+		<entry>
+			<key>
+				<util:constant
+					static-field="org.apache.kafka.clients.producer.ProducerConfig.MAX_REQUEST_SIZE_CONFIG" />
+			</key>
+			<value>${pdolive.kafka.producer.request.max.size}</value>
+		</entry>
+		<entry>
+			<key>
+				<util:constant
+					static-field="org.apache.kafka.clients.producer.ProducerConfig.BUFFER_MEMORY_CONFIG" />
+			</key>
+			<value>${pdolive.kafka.producer.buffer.mem.size}</value>
+		</entry>
+		<entry key="request.timeout.ms">
+			<value>
+				${pdolive.kafka.producer.request.timeout}
+			</value>
+		</entry>
+		<entry key="key.serializer">
+			<value type="java.lang.Class">
+				org.apache.kafka.common.serialization.IntegerSerializer
+			</value>
+		</entry>
+		<entry key="value.serializer">
+			<value type="java.lang.Class">
+				com.elevate.edw.sqlservercdc.kafka.JsonSerializer
+			</value>
+		</entry>
+
+		<entry key="security.protocol" value="SASL_SSL" />
+		<entry key="ssl.truststore.location" value="${pdolive.kafka.ssl.truststore.location}" />
+		<entry key="ssl.truststore.password" value="${pdolive.kafka.ssl.truststore.password}" />
+		<entry key="sasl.kerberos.service.name" value="kafka" />
+	</util:map>
+
+
+	<!-- Main configuration for producer -->
+	<bean id="pdolive.cdt.config" class="com.elevate.edw.sqlservercdc.CDTConfiguration"
+		p:transDs-ref="pdolive.transds" p:readDs-ref="pdolive.readds"
+		p:tableList-ref="pdolive.cdt.tablelist" p:maxThreadCount="5"
+		p:kafkatopic="${pdolive.kafka.topic}" p:producerConfig-ref="pdolive.producer.config"
+		p:versionStore-ref="pdolive.versionstore" p:pullInterval="${pdolive.kafka.producer.pull.interval}"/>
+
+
+	<!-- kafka consumer configuration -->
+	<util:map id="pdolive.kafka.receiver.config">
+		<entry>
+			<key>
+				<util:constant
+					static-field="org.apache.kafka.clients.consumer.ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG" />
+			</key>
+			<value>${pdolive.kafka.bootstrapserver}</value>
+		</entry>
+		<entry>
+			<key>
+				<util:constant
+					static-field="org.apache.kafka.clients.consumer.ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG" />
+			</key>
+			<value>${pdolive.kafka.consumer.partition.max.fetch.bytes}</value>
+		</entry>
+
+		<!-- increase session liveness -->
+		<entry key="heartbeat.interval.ms" value="10000" />
+		<entry key="session.timeout.ms" value="30000" />
+		<entry key="max.poll.records" value="100" />
+
+
+
+		<entry>
+			<key>
+				<util:constant
+					static-field="org.apache.kafka.clients.consumer.ConsumerConfig.GROUP_ID_CONFIG" />
+			</key>
+			<value>${pdolive.kafka.consumer.group.id}</value>
+		</entry>
+		<entry key="security.protocol" value="SASL_SSL" />
+		<entry key="ssl.truststore.location" value="${pdolive.kafka.ssl.truststore.location}" />
+		<entry key="ssl.truststore.password" value="${pdolive.kafka.ssl.truststore.password}" />
+		<entry key="sasl.kerberos.service.name" value="kafka" />
+		<entry key="receiver.kafka.topics" value="${pdolive.kafka.topic}" />
+		<entry key="receiver.thread.count" value="5" />
+	</util:map>
+    
+    <util:list id="pdolive.datatransformrules" value-type="com.elevate.edw.sqlservercdc.write.transform.DataTransformRule">
+<!--     	<bean class="com.elevate.edw.sqlservercdc.writer.transform.ColumnNameRemapping"> -->
+<!-- 			<constructor-arg type="String" value="DBO" /> -->
+<!-- 			<constructor-arg type="String" value="ACH_RECEIPT" /> -->
+<!-- 			<constructor-arg> -->
+<!-- 				<util:map id="pdolive.columnnameremapping.values" key-type="java.lang.String" value-type="java.lang.String"> -->
+<!--             		<entry key="ORIG_ROUTING_#" value="ORIG_ROUTING_NBR" /> -->
+<!--             		<entry key="ORIG_ROUTING_#_CHECK_DIGIT" value="ORIG_ROUTING_NBR_CHECK_DIGIT" /> -->
+<!-- 					<entry key="ORIG_TRACE_#" value="ORIG_TRACE_NBR" /> -->
+<!-- 					<entry key="RETURN_TRACE_#" value="RETURN_TRACE_NBR" /> -->
+<!-- 					<entry key="CORRECTED_ACCOUNT_#" value="CORRECTED_ACCOUNT_NBR" /> -->
+<!-- 					<entry key="CORRECTED_ROUTING_#" value="CORRECTED_ROUTING_NBR" /> -->
+<!-- 					<entry key="CORRECTED_INDIVIDUAL_ID_#" value="CORRECTED_INDIVIDUAL_ID_NBR" /> -->
+<!-- 					<entry key="CORRECTED_COMANY_ID_#" value="CORRECTED_COMANY_ID_NBR" /> -->
+<!--     			</util:map> -->
+<!-- 			</constructor-arg> -->
+<!--     	</bean> -->
+    </util:list>
+    
+    <bean id="pdolive.datatransformer" class="com.elevate.edw.sqlservercdc.writer.transform.DataTransformer"
+    scope="prototype" init-method="init">
+    	<constructor-arg ref="pdolive.datatransformrules" />
+		<constructor-arg ref="pdolive.readds" />
+    </bean>
+    
+	<!-- hbase writer configuration -->
+	<util:map id="pdolive.hbasewriter.config" key-type="java.lang.String"
+		value-type="java.lang.String">
+		<entry key="writer.hbase.namespace" value="${pdolive.hbase.namespace}" />
+		<entry key="writer.hbase.columnfamily" value="${pdolive.hbase.table.columnfamily}" />
+		<!-- base directory which contains the core-site/hdfs-site/hase-site xmlfiles -->
+		<entry key="writer.hbase.hadoopconfigbasedir" value="${pdolive.hbase.config.basedir}" />
+		<entry key="writer.hbase.login.principal" value="${pdolive.hbase.config.login.principal}" />
+		<entry key="writer.hbase.login.keytab" value="${pdolive.hbase.config.login.keytab}" />
+	</util:map>
+
+	<bean id="pdolive.writer.config" class="com.elevate.edw.sqlservercdc.writer.WriterConfiguration">
+		<!-- writer class string -->
+		<constructor-arg type="String"
+			value="com.elevate.edw.sqlservercdc.writer.hbase.HbaseWriter" />
+		<!-- writer configuration -->
+		<constructor-arg type="Map" ref="pdolive.hbasewriter.config" />
+	</bean>
+	
+	<!-- receiverconfig -->
+	<bean id="pdolive.receiver.config"
+		class="com.elevate.edw.sqlservercdc.kafka.ReceiverConfiguration">
+		<!-- kafka related config -->
+		<constructor-arg type="java.util.Map" ref="pdolive.kafka.receiver.config" />
+		<!-- writer configuration -->
+		<constructor-arg
+			type="com.elevate.edw.sqlservercdc.writer.WriterConfiguration" ref="pdolive.writer.config" />
+		<!-- bookmark store -->
+		<constructor-arg
+			type="com.elevate.edw.sqlservercdc.kafka.DatabaseBookmarkStore" ref="pdolive.bookmarkstore" />
+		<constructor-arg
+			type="com.elevate.edw.sqlservercdc.writer.transform.DataTransformer" ref="pdolive.datatransformer" />
+	</bean>
+
+
+
+	<!-- CDTController instance -->
+	<bean id="pdolive.cdtcontroller" class="com.elevate.edw.sqlservercdc.CDTController">
+		<constructor-arg type="com.elevate.edw.sqlservercdc.CDTConfiguration"
+			ref="pdolive.cdt.config" />
+		<property name="_SLEEPINTERVAL" value="${pdolive.kafka.producer.sleep.interval}" />
+	</bean>
+
+	<!-- Receiver instance -->
+	<bean id="pdolive.receivercontroller" class="com.elevate.edw.sqlservercdc.kafka.ReceiverController">
+		<constructor-arg
+			type="com.elevate.edw.sqlservercdc.kafka.ReceiverConfiguration" ref="pdolive.receiver.config" />
+		<property name="_SLEEPINTERVAL" value="${pdolive.kafka.consumer.sleep.interval}" />
+	</bean>
+
+	<!-- Tablename list. Please use UPPER CASE -->
+	<util:list id="pdolive.cdt.tablelist" value-type="java.lang.String">
+		<value>DBO.ACCOUNT</value>
+		<value>DBO.ACCOUNT_STATUS</value>
+		<value>DBO.ACCOUNT_STATUS_HISTORY</value>
+		<value>DBO.ACCOUNTATTRIBUTE</value>
+		<value>DBO.ACH</value>
+		<value>DBO.ACH_RECEIPT</value>
+		<value>DBO.ACH_RETURN_CODE</value>
+		<value>DBO.ACHMERCHANTLENDER</value>
+		<value>DBO.ADJUSTMENT</value>
+		<value>DBO.APPLICATION</value>
+		<value>DBO.APPLICATION_REASON</value>
+		<value>DBO.APPLICATION_STATUS</value>
+		<value>DBO.APPLICATION_STATUS_HISTORY</value>
+		<value>DBO.BANK</value>
+		<value>DBO.CAMPAIGNEVENT</value>
+		<value>DBO.CAMPAIGNTRACKING</value>
+		<value>DBO.CAMPAIGNTRACKINGVALUE</value>
+		<value>DBO.COLLECTION</value>
+		<value>DBO.COLLECTION_EVENT</value>
+		<value>DBO.COLLECTION_EVENT_TYPE</value>
+		<value>DBO.COLLECTION_PROMISE</value>
+		<value>DBO.COLLECTION_WORKED</value>
+		<value>DBO.COMMENT_CLASS</value>
+		<value>DBO.COMMENTS</value>
+		<value>DBO.DECISIONENGINEREJECTREASON</value>
+		<value>DBO.EMPLOYMENT</value>
+		<value>DBO.EXCEPTIONRETURNDETAIL</value>
+		<value>DBO.IOVATIONHISTORY</value>
+		<value>DBO.LENDERTYPE</value>
+		<value>DBO.LOAN</value>
+		<value>DBO.LOAN_AGREEMENT</value>
+		<value>DBO.LOAN_ROLLBACK</value>
+		<value>DBO.LOAN_SERIES</value>
+		<value>DBO.LOAN_STATUS</value>
+		<value>DBO.LOAN_STATUS_HISTORY</value>
+		<value>DBO.LOAN_TYPE</value>
+		<value>DBO.LOANBALANCE</value>
+		<value>DBO.LOANPARTICIPATION</value>
+		<value>DBO.LOANPAYMENTTRANSACTION</value>
+		<value>DBO.LOANPLANNEDPAYMENT</value>
+		<value>DBO.PERSONAL</value>
+		<value>DBO.PROMOCODEUSAGE</value>
+		<value>DBO.REFERRAL</value>
+		<value>DBO.RPTTRIALBALANCEDAILY</value>
+		<value>DBO.STATE_RULE</value>
+		<value>DBO.STATES_RATE</value>
+		<value>DBO.TRANSACTIONACTION</value>
+		<value>DBO.TRANSACTIONDETAIL</value>
+		<value>DBO.TRANSACTIONRETURN</value>
+		<value>DBO.TRANSACTIONSCHEDULED</value>
+		<value>DBO.TRANSACTIONSETTLEMENT</value>
+		<value>DBO.TRANSACTIONSTATUS</value>
+		<value>DBO.TRANSACTIONSUMMARY</value>
+		<value>DBO.TRANSACTIONTENDER</value>
+	</util:list>
+
+
+</beans>

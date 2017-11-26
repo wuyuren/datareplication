@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:p="http://www.springframework.org/schema/p"
+	xmlns:util="http://www.springframework.org/schema/util"
+	xmlns:context="http://www.springframework.org/schema/context"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans
+	http://www.springframework.org/schema/beans/spring-beans.xsd
+	http://www.springframework.org/schema/util
+	http://www.springframework.org/schema/util/spring-util.xsd
+	http://www.springframework.org/schema/context 
+	http://www.springframework.org/schema/context/spring-context.xsd
+	">
+
+	<!-- load proeprty files from file system, make sure ignore-unresolvable=false. Each xml 
+	based configuration will be coupled with a property file hence multiple property files exists. 
+	this attribute is required to make multiple props to work .  -->
+	<context:property-placeholder
+		properties-ref="commonprop" ignore-unresolvable="true" />
+
+	<util:properties id="commonprop" location="file:///${cdt.app.config.path}/common/common.properties" />
+
+
+
+	<!-- database version store data source -->
+	<bean id="databaseVersionStoreDs" class="org.apache.commons.dbcp2.BasicDataSource"
+		destroy-method="close">
+		<property name="driverClassName"
+			value="${common.versionstore.ds.jdbc.driver.classname}" />
+		<property name="url" value="${common.versionstore.ds.jdbc.url}" />
+		<property name="username" value="${common.versionstore.ds.jdbc.username}" />
+		<property name="password" value="${common.versionstore.ds.jdbc.password}" />
+
+		<!-- connection pool properties -->
+		<property name="initialSize" value="${common.versionstore.ds.jdbc.initialSize}" />
+		<property name="maxTotal" value="${common.versionstore.ds.jdbc.maxTotal}" />
+		<property name="poolPreparedStatements" value="true" />
+	</bean>
+
+	<!-- database bookmark store data source -->
+	<bean id="databaseBookmarkStoreDs" class="org.apache.commons.dbcp2.BasicDataSource"
+		destroy-method="close">
+		<property name="driverClassName"
+			value="${common.bookmarkstore.ds.jdbc.driver.classname}" />
+		<property name="url" value="${common.bookmarkstore.ds.jdbc.url}" />
+		<property name="username" value="${common.bookmarkstore.ds.jdbc.username}" />
+		<property name="password" value="${common.bookmarkstore.ds.jdbc.password}" />
+
+		<!-- connection pool properties -->
+		<property name="initialSize" value="${common.bookmarkstore.ds.jdbc.initialSize}" />
+		<property name="maxTotal" value="${common.bookmarkstore.ds.jdbc.maxTotal}" />
+		<property name="poolPreparedStatements" value="true" />
+	</bean>
+
+
+</beans>

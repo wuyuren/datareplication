@@ -1,0 +1,16 @@
+17/06/09 10:39:03 INFO kafka.ReceiverController: init completed
+17/06/09 10:39:03 INFO kafka.ReceiverController: ReceiverController start executing
+17/06/09 10:39:03 INFO kafka.ReceiverController: start kafka listner container
+17/06/09 10:40:11 INFO kafka.ReceiverController: stop kafka listner container
+17/06/09 10:40:11 FATAL kafka.ReceiverCallable: org.apache.kafka.common.errors.WakeupException
+17/06/09 10:40:16 INFO kafka.ReceiverCallable: thread :elasticnls.receivercallalbe-1 latch released!
+17/06/09 10:40:16 FATAL kafka.ReceiverCallable: org.apache.kafka.common.errors.WakeupException
+17/06/09 10:40:21 INFO kafka.ReceiverCallable: thread :elasticnls.receivercallalbe-2 latch released!
+17/06/09 10:40:21 FATAL kafka.ReceiverCallable: org.apache.kafka.common.errors.WakeupException
+17/06/09 10:40:26 INFO kafka.ReceiverCallable: thread :elasticnls.receivercallalbe-3 latch released!
+17/06/09 10:40:26 FATAL kafka.ReceiverCallable: org.apache.kafka.common.errors.WakeupException
+17/06/09 10:40:31 INFO kafka.ReceiverCallable: thread :elasticnls.receivercallalbe-4 latch released!
+17/06/09 10:40:31 FATAL kafka.ReceiverCallable: org.apache.kafka.common.errors.WakeupException
+17/06/09 10:40:36 INFO kafka.ReceiverCallable: thread :elasticnls.receivercallalbe-5 latch released!
+17/06/09 10:40:36 INFO kafka.ReceiverController: ReceiverController shutdown
+17/06/09 10:40:36 INFO kafka.ReceiverController: ReceiverController is exiting
